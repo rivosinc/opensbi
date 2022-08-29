@@ -446,6 +446,9 @@ static inline char *sbi_hart_extension_id2string(int ext)
 	case SBI_HART_EXT_SMSTATEEN:
 		estr = "smstateen";
 		break;
+	case SBI_HART_EXT_SSCOUNTD:
+		estr = "sscdeleg";
+		break;
 	default:
 		break;
 	}
@@ -553,7 +556,8 @@ static int hart_detect_features(struct sbi_scratch *scratch)
 	struct sbi_trap_info trap = {0};
 	struct sbi_hart_features *hfeatures =
 		sbi_scratch_offset_ptr(scratch, hart_features_offset);
-	unsigned long val, oldval;
+	unsigned long val, oldval, menvcfg_val;
+	bool sscountd_detected = 0;
 	int rc;
 
 	/* If hart features already detected then do nothing */
@@ -660,9 +664,39 @@ __mhpm_skip:
 	if (hfeatures->priv_version >= SBI_HART_PRIV_VER_1_12) {
 		/* Detect if hart supports sscofpmf */
 		csr_read_allowed(CSR_SCOUNTOVF, (unsigned long)&trap);
-		if (!trap.cause)
+		menvcfg_val = csr_read(CSR_MENVCFG);
+		if (!trap.cause) {
 			__sbi_hart_update_extension(hfeatures,
 					SBI_HART_EXT_SSCOFPMF, true);
+
+		/* Detect if hart support sscountd */
+#if __riscv_xlen > 32
+			/*
+			* Set menvcfg.HPMDE == 1 for RV64 or RV128
+			*
+			* If Svpbmt extension is not available then menvcfg.menvcfg.HPMDE
+			* will be read-only zero.
+			*/
+			menvcfg_val |= ENVCFG_HPMDE;
+			csr_write(CSR_MENVCFG, menvcfg_val);
+			menvcfg_val = csr_read(CSR_MENVCFG);
+			sscountd_detected = (menvcfg_val & ENVCFG_HPMDE) != 0;
+#else
+			/*
+			* Set menvcfg.ENVCFGH_HPMDE == 1 for RV32
+			* If Scountd extension is not available then menvcfg.ENVCFGH_HPMDE
+			* will be read-only zero
+			*/
+			menvcfg_val |= ENVCFGH_HPMDE;
+			csr_write(CSR_MENVCFGH, menvcfg_val);
+			menvcfg_val = csr_read(CSR_MENVCFGH);
+			sscountd_detected = (menvcfg_val & ENVCFGH_HPMDE) != 0;
+#endif
+			if (sscountd_detected != 0) {
+				__sbi_hart_update_extension(hfeatures,
+						SBI_HART_EXT_SSCOUNTD, true);
+			}
+		}
 	}
 
 	/* Detect if hart supports time CSR */
