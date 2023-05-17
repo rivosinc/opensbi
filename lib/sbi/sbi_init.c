@@ -14,6 +14,7 @@
 #include <sbi/sbi_cppc.h>
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_ecall.h>
+#include <sbi/sbi_fwft.h>
 #include <sbi/sbi_hart.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_heap.h>
@@ -305,6 +306,12 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	rc = sbi_timer_init(scratch, true);
 	if (rc) {
 		sbi_printf("%s: timer init failed (error %d)\n", __func__, rc);
+		sbi_hart_hang();
+	}
+
+	rc = sbi_fwft_init(scratch, true);
+	if (rc) {
+		sbi_printf("%s: fwft init failed (error %d)\n", __func__, rc);
 		sbi_hart_hang();
 	}
 
