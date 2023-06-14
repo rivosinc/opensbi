@@ -36,6 +36,8 @@ enum sbi_hart_extensions {
 	SBI_HART_EXT_SMSTATEEN,
 	/** HART has Sstc extension */
 	SBI_HART_EXT_SSTC,
+	/** Hart has Smcntrpmf extension */
+	SBI_HART_EXT_SMCNTRPMF,
 
 	/** Maximum index of Hart extension */
 	SBI_HART_EXT_MAX,

@@ -453,6 +453,9 @@ static inline char *sbi_hart_extension_id2string(int ext)
 	case SBI_HART_EXT_SMSTATEEN:
 		estr = "smstateen";
 		break;
+	case SBI_HART_EXT_SMCNTRPMF:
+		estr = "smcntrpmf";
+		break;
 	default:
 		break;
 	}
@@ -698,6 +701,14 @@ __mhpm_skip:
 		if (!trap.cause)
 			__sbi_hart_update_extension(hfeatures,
 					SBI_HART_EXT_SMSTATEEN, true);
+	}
+
+	/* Detect if hart supports smcntrpmf */
+	if (hfeatures->priv_version >= SBI_HART_PRIV_VER_1_12) {
+		csr_read_allowed(CSR_MCYCLECFG, (unsigned long)&trap);
+		if (!trap.cause)
+			__sbi_hart_update_extension(hfeatures,
+					SBI_HART_EXT_SMCNTRPMF, true);
 	}
 
 	/* Let platform populate extensions */
