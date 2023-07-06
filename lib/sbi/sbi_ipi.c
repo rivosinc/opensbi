@@ -66,7 +66,7 @@ static int sbi_ipi_send(struct sbi_scratch *scratch, u32 remote_hartindex,
 		 * SBI_IPI_UPDATE_BREAK for self-IPIs. For other events, check
 		 * for self-IPI and execute the callback directly here.
 		 */
-		ipi_ops->process(scratch);
+		ipi_ops->process(scratch, NULL);
 		return 0;
 	}
 
