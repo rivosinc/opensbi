@@ -20,6 +20,7 @@
 #include <sbi/sbi_trap_ldst.h>
 #include <sbi/sbi_pmu.h>
 #include <sbi/sbi_scratch.h>
+#include <sbi/sbi_sse.h>
 #include <sbi/sbi_timer.h>
 #include <sbi/sbi_trap.h>
 
@@ -338,6 +339,7 @@ struct sbi_trap_context *sbi_trap_handler(struct sbi_trap_context *tcntx)
 trap_done:
 	if (rc)
 		sbi_trap_error(msg, rc, tcntx);
+	sbi_sse_process_pending_events(regs);
 	sbi_trap_set_context(scratch, tcntx->prev_context);
 	return tcntx;
 }
