@@ -29,7 +29,7 @@
 
 #define sbi_ecall_console_putc(c) SBI_ECALL_1(SBI_EXT_0_1_CONSOLE_PUTCHAR, 0, (c))
 
-static inline void sbi_ecall_console_puts(const char *str)
+void sbi_ecall_console_puts(const char *str)
 {
 	while (str && *str)
 		sbi_ecall_console_putc(*str++);
@@ -40,9 +40,13 @@ static inline void sbi_ecall_console_puts(const char *str)
 		__asm__ __volatile__("wfi" ::: "memory"); \
 	} while (0)
 
+void test_sse(void);
+
 void test_main(unsigned long a0, unsigned long a1)
 {
 	sbi_ecall_console_puts("\nTest payload running\n");
+
+	test_sse();
 
 	while (1)
 		wfi();
