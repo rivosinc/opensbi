@@ -19,6 +19,7 @@
 #include <sbi/sbi_irqchip.h>
 #include <sbi/sbi_misaligned_ldst.h>
 #include <sbi/sbi_pmu.h>
+#include <sbi/sbi_sse.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_timer.h>
 #include <sbi/sbi_trap.h>
@@ -198,6 +199,18 @@ int sbi_trap_redirect(struct sbi_trap_regs *regs,
 	return 0;
 }
 
+volatile unsigned int *rec_ctrl_addr = (volatile unsigned int *)0x4000040;
+volatile unsigned int *rec_stat_addr = (volatile unsigned int *)0x4000048;
+
+void sbi_ras_process(struct sbi_trap_regs *regs)
+{
+	sbi_printf("%s: Got RAS HP INT!!\n", __func__);
+	*(rec_ctrl_addr) = *(rec_ctrl_addr) | 0x4;
+	while (*rec_stat_addr & 1);
+	csr_clear(CSR_MIP, MIP_RASHP_INTP);
+	sbi_sse_inject_event(SBI_SSE_EVENT_LOCAL_RAS, regs);
+}
+
 static int sbi_trap_nonaia_irq(struct sbi_trap_regs *regs, ulong mcause)
 {
 	mcause &= ~(1UL << (__riscv_xlen - 1));
@@ -207,6 +220,9 @@ static int sbi_trap_nonaia_irq(struct sbi_trap_regs *regs, ulong mcause)
 		break;
 	case IRQ_M_SOFT:
 		sbi_ipi_process(regs);
+		break;
+	case MIP_RASHP_INT:
+		sbi_ras_process(regs);
 		break;
 	case IRQ_M_EXT:
 		return sbi_irqchip_process(regs);
@@ -224,6 +240,7 @@ static int sbi_trap_aia_irq(struct sbi_trap_regs *regs, ulong mcause)
 
 	while ((mtopi = csr_read(CSR_MTOPI))) {
 		mtopi = mtopi >> TOPI_IID_SHIFT;
+
 		switch (mtopi) {
 		case IRQ_M_TIMER:
 			sbi_timer_process();
@@ -235,6 +252,9 @@ static int sbi_trap_aia_irq(struct sbi_trap_regs *regs, ulong mcause)
 			rc = sbi_irqchip_process(regs);
 			if (rc)
 				return rc;
+			break;
+		case MIP_RASHP_INT:
+			sbi_ras_process(regs);
 			break;
 		default:
 			return SBI_ENOENT;

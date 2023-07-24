@@ -91,6 +91,7 @@
 #define IRQ_M_EXT			11
 #define IRQ_S_GEXT			12
 #define IRQ_PMU_OVF			13
+#define MIP_RASHP_INT			43
 
 #define MIP_SSIP			(_UL(1) << IRQ_S_SOFT)
 #define MIP_VSSIP			(_UL(1) << IRQ_VS_SOFT)
@@ -103,6 +104,7 @@
 #define MIP_MEIP			(_UL(1) << IRQ_M_EXT)
 #define MIP_SGEIP			(_UL(1) << IRQ_S_GEXT)
 #define MIP_LCOFIP			(_UL(1) << IRQ_PMU_OVF)
+#define MIP_RASHP_INTP			(_UL(1) << MIP_RASHP_INT)
 
 #define SIP_SSIP			MIP_SSIP
 #define SIP_STIP			MIP_STIP

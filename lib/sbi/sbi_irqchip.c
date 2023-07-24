@@ -39,6 +39,8 @@ int sbi_irqchip_init(struct sbi_scratch *scratch, bool cold_boot)
 
 	if (ext_irqfn != default_irqfn)
 		csr_set(CSR_MIE, MIP_MEIP);
+	
+	csr_set(CSR_MIE, MIP_RASHP_INTP);
 
 	return 0;
 }
