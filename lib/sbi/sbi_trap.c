@@ -208,6 +208,9 @@ static int sbi_trap_nonaia_irq(struct sbi_trap_regs *regs, ulong mcause)
 	case IRQ_M_SOFT:
 		sbi_ipi_process(regs);
 		break;
+	case IRQ_PMU_OVF:
+		sbi_pmu_ovf_irq(regs);
+		break;
 	case IRQ_M_EXT:
 		return sbi_irqchip_process(regs);
 	default:
@@ -230,6 +233,9 @@ static int sbi_trap_aia_irq(struct sbi_trap_regs *regs, ulong mcause)
 			break;
 		case IRQ_M_SOFT:
 			sbi_ipi_process(regs);
+			break;
+		case IRQ_PMU_OVF:
+			sbi_pmu_ovf_irq(regs);
 			break;
 		case IRQ_M_EXT:
 			rc = sbi_irqchip_process(regs);
