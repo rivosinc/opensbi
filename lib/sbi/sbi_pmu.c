@@ -17,6 +17,7 @@
 #include <sbi/sbi_pmu.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_string.h>
+#include <sbi/sbi_sse.h>
 
 /** Information about hardware counters */
 struct sbi_pmu_hw_event {
@@ -295,6 +296,16 @@ int sbi_pmu_add_raw_event_counter_map(uint64_t select, uint64_t select_mask, u32
 {
 	return pmu_add_hw_event_map(SBI_PMU_EVENT_RAW_IDX,
 				    SBI_PMU_EVENT_RAW_IDX, cmap, select, select_mask);
+}
+
+void sbi_pmu_ovf_irq(struct sbi_trap_regs *regs)
+{
+	/*
+	 * We need to disable LCOFIP before returning to S-mode or we will loop
+	 * on LCOFIP being triggered
+	 */
+	csr_clear(CSR_MIE, MIP_LCOFIP);
+	sbi_sse_inject_event(SBI_SSE_EVENT_LOCAL_PMU, regs);
 }
 
 static int pmu_ctr_enable_irq_hw(int ctr_idx)
@@ -970,6 +981,31 @@ void sbi_pmu_exit(struct sbi_scratch *scratch)
 	pmu_reset_event_map(pmu_get_hart_state_ptr(scratch));
 }
 
+static void pmu_sse_enable(uint32_t event_id)
+{
+	csr_clear(CSR_MIDELEG, sbi_pmu_irq_bit());
+	csr_clear(CSR_MIP, MIP_LCOFIP);
+	csr_set(CSR_MIE, MIP_LCOFIP);
+}
+
+static void pmu_sse_disable(uint32_t event_id)
+{
+	csr_clear(CSR_MIE, MIP_LCOFIP);
+	csr_set(CSR_MIDELEG, sbi_pmu_irq_bit());
+}
+
+static void pmu_sse_complete(uint32_t event_id)
+{
+	csr_clear(CSR_MIP, MIP_LCOFIP);
+	csr_set(CSR_MIE, MIP_LCOFIP);
+}
+
+static const struct sbi_sse_cb_ops pmu_sse_cb_ops = {
+	.enable_cb = pmu_sse_enable,
+	.disable_cb = pmu_sse_disable,
+	.complete_cb = pmu_sse_complete,
+};
+
 int sbi_pmu_init(struct sbi_scratch *scratch, bool cold_boot)
 {
 	int hpm_count = sbi_fls(sbi_hart_mhpm_mask(scratch));
@@ -1008,6 +1044,8 @@ int sbi_pmu_init(struct sbi_scratch *scratch, bool cold_boot)
 
 		total_ctrs = num_hw_ctrs + SBI_PMU_FW_CTR_MAX;
 	}
+
+	sbi_sse_set_cb_ops(SBI_SSE_EVENT_LOCAL_PMU, &pmu_sse_cb_ops);
 
 	phs = pmu_get_hart_state_ptr(scratch);
 	if (!phs) {
