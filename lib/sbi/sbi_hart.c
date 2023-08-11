@@ -31,6 +31,15 @@ void (*sbi_hart_expected_trap)(void) = &__sbi_expected_trap;
 
 static unsigned long hart_features_offset;
 
+#if __riscv_xlen == 32
+static void menvcfg_update_rv32(int bit) {
+	unsigned long menvcfgh_val;
+	menvcfgh_val = csr_read(CSR_MENVCFGH);
+	menvcfgh_val |= bit;
+	csr_write(CSR_MENVCFGH, menvcfgh_val);
+}
+#endif
+
 static void mstatus_init(struct sbi_scratch *scratch)
 {
 	unsigned long menvcfg_val, mstatus_val = 0;
@@ -95,11 +104,18 @@ static void mstatus_init(struct sbi_scratch *scratch)
 		mstateen_val |= SMSTATEEN0_HSENVCFG;
 
 		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMAIA))
-			mstateen_val |= (SMSTATEEN0_AIA | SMSTATEEN0_SVSLCT |
+			mstateen_val |= (SMSTATEEN0_AIA |
 					SMSTATEEN0_IMSIC);
 		else
-			mstateen_val &= ~(SMSTATEEN0_AIA | SMSTATEEN0_SVSLCT |
+			mstateen_val &= ~(SMSTATEEN0_AIA |
 					SMSTATEEN0_IMSIC);
+
+		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMAIA) ||
+		    sbi_hart_has_extension(scratch, SBI_HART_EXT_SMCSRIND))
+			mstateen_val |= (SMSTATEEN0_SVSLCT);
+		else
+			mstateen_val &= ~(SMSTATEEN0_SVSLCT);
+
 		csr_write(CSR_MSTATEEN0, mstateen_val);
 #if __riscv_xlen == 32
 		csr_write(CSR_MSTATEEN0H, mstateen_val >> 32);
@@ -150,12 +166,17 @@ static void mstatus_init(struct sbi_scratch *scratch)
 		 */
 		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SSTC)) {
 #if __riscv_xlen == 32
-			unsigned long menvcfgh_val;
-			menvcfgh_val = csr_read(CSR_MENVCFGH);
-			menvcfgh_val |= ENVCFGH_STCE;
-			csr_write(CSR_MENVCFGH, menvcfgh_val);
+			menvcfg_update_rv32(ENVCFGH_STCE);
 #else
 			menvcfg_val |= ENVCFG_STCE;
+#endif
+		}
+
+		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMCDELEG)) {
+#if __riscv_xlen == 32
+			menvcfg_update_rv32(ENVCFGH_CDE);
+#else
+			menvcfg_val |= ENVCFG_CDE;
 #endif
 		}
 
@@ -684,6 +705,12 @@ static inline char *sbi_hart_extension_id2string(int ext)
 	case SBI_HART_EXT_SMCNTRPMF:
 		estr = "smcntrpmf";
 		break;
+	case SBI_HART_EXT_SMCSRIND:
+		estr = "smcsrind";
+		break;
+	case SBI_HART_EXT_SMCDELEG:
+		estr = "smcdeleg";
+		break;
 	default:
 		break;
 	}
@@ -955,6 +982,7 @@ __pmp_skip:
 			__sbi_hart_update_extension(hfeatures,
 					SBI_HART_EXT_SMCNTRPMF, true);
 	}
+
 
 	/* Let platform populate extensions */
 	rc = sbi_platform_extensions_init(sbi_platform_thishart_ptr(),
