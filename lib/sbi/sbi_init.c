@@ -12,10 +12,12 @@
 #include <sbi/riscv_barrier.h>
 #include <sbi/riscv_locks.h>
 #include <sbi/sbi_console.h>
+#include <sbi/sbi_cppc.h>
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_ecall.h>
 #include <sbi/sbi_hart.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_heap.h>
 #include <sbi/sbi_hsm.h>
 #include <sbi/sbi_ipi.h>
 #include <sbi/sbi_irqchip.h>
@@ -69,6 +71,8 @@ static void sbi_boot_print_general(struct sbi_scratch *scratch)
 	const struct sbi_timer_device *tdev;
 	const struct sbi_console_device *cdev;
 	const struct sbi_system_reset_device *srdev;
+	const struct sbi_system_suspend_device *susp_dev;
+	const struct sbi_cppc_device *cppc_dev;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
 	if (scratch->options & SBI_SCRATCH_NO_BOOT_PRINTS)
@@ -103,11 +107,32 @@ static void sbi_boot_print_general(struct sbi_scratch *scratch)
 	srdev = sbi_system_reset_get_device(SBI_SRST_RESET_TYPE_SHUTDOWN, 0);
 	sbi_printf("Platform Shutdown Device  : %s\n",
 		   (srdev) ? srdev->name : "---");
+	susp_dev = sbi_system_suspend_get_device();
+	sbi_printf("Platform Suspend Device   : %s\n",
+		   (susp_dev) ? susp_dev->name : "---");
+	cppc_dev = sbi_cppc_get_device();
+	sbi_printf("Platform CPPC Device      : %s\n",
+		   (cppc_dev) ? cppc_dev->name : "---");
 
 	/* Firmware details */
 	sbi_printf("Firmware Base             : 0x%lx\n", scratch->fw_start);
 	sbi_printf("Firmware Size             : %d KB\n",
 		   (u32)(scratch->fw_size / 1024));
+	sbi_printf("Firmware RW Offset        : 0x%lx\n", scratch->fw_rw_offset);
+	sbi_printf("Firmware RW Size          : %d KB\n",
+		   (u32)((scratch->fw_size - scratch->fw_rw_offset) / 1024));
+	sbi_printf("Firmware Heap Offset      : 0x%lx\n", scratch->fw_heap_offset);
+	sbi_printf("Firmware Heap Size        : "
+		   "%d KB (total), %d KB (reserved), %d KB (used), %d KB (free)\n",
+		   (u32)(scratch->fw_heap_size / 1024),
+		   (u32)(sbi_heap_reserved_space() / 1024),
+		   (u32)(sbi_heap_used_space() / 1024),
+		   (u32)(sbi_heap_free_space() / 1024));
+	sbi_printf("Firmware Scratch Size     : "
+		   "%d B (total), %d B (used), %d B (free)\n",
+		   SBI_SCRATCH_SIZE,
+		   (u32)sbi_scratch_used_space(),
+		   (u32)(SBI_SCRATCH_SIZE - sbi_scratch_used_space()));
 
 	/* SBI details */
 	sbi_printf("Runtime SBI Version       : %d.%d\n",
@@ -190,7 +215,7 @@ static void wait_for_coldboot(struct sbi_scratch *scratch, u32 hartid)
 			wfi();
 			cmip = csr_read(CSR_MIP);
 		 } while (!(cmip & (MIP_MSIP | MIP_MEIP)));
-	};
+	}
 
 	/* Acquire coldboot lock */
 	spin_lock(&coldboot_lock);
@@ -233,12 +258,13 @@ static void wake_coldboot_harts(struct sbi_scratch *scratch, u32 hartid)
 	spin_unlock(&coldboot_lock);
 }
 
+static unsigned long entry_count_offset;
 static unsigned long init_count_offset;
 
 static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 {
 	int rc;
-	unsigned long *init_count;
+	unsigned long *count;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
 	/* Note: This has to be first thing in coldboot init sequence */
@@ -247,13 +273,25 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 
 	/* Note: This has to be second thing in coldboot init sequence */
+	rc = sbi_heap_init(scratch);
+	if (rc)
+		sbi_hart_hang();
+
+	/* Note: This has to be the third thing in coldboot init sequence */
 	rc = sbi_domain_init(scratch, hartid);
 	if (rc)
+		sbi_hart_hang();
+
+	entry_count_offset = sbi_scratch_alloc_offset(__SIZEOF_POINTER__);
+	if (!entry_count_offset)
 		sbi_hart_hang();
 
 	init_count_offset = sbi_scratch_alloc_offset(__SIZEOF_POINTER__);
 	if (!init_count_offset)
 		sbi_hart_hang();
+
+	count = sbi_scratch_offset_ptr(scratch, entry_count_offset);
+	(*count)++;
 
 	rc = sbi_hsm_init(scratch, hartid, true);
 	if (rc)
@@ -272,8 +310,11 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 
 	rc = sbi_pmu_init(scratch, true);
-	if (rc)
+	if (rc) {
+		sbi_printf("%s: pmu init failed (error %d)\n",
+			   __func__, rc);
 		sbi_hart_hang();
+	}
 
 	sbi_boot_print_banner(scratch);
 
@@ -302,12 +343,6 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 	}
 
-	rc = sbi_ecall_init();
-	if (rc) {
-		sbi_printf("%s: ecall init failed (error %d)\n", __func__, rc);
-		sbi_hart_hang();
-	}
-
 	/*
 	 * Note: Finalize domains after HSM initialization so that we
 	 * can startup non-root domains.
@@ -321,21 +356,26 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 	}
 
-	rc = sbi_hart_pmp_configure(scratch);
-	if (rc) {
-		sbi_printf("%s: PMP configure failed (error %d)\n",
-			   __func__, rc);
-		sbi_hart_hang();
-	}
-
 	/*
-	 * Note: Platform final initialization should be last so that
-	 * it sees correct domain assignment and PMP configuration.
+	 * Note: Platform final initialization should be after finalizing
+	 * domains so that it sees correct domain assignment and PMP
+	 * configuration for FDT fixups.
 	 */
 	rc = sbi_platform_final_init(plat, true);
 	if (rc) {
 		sbi_printf("%s: platform final init failed (error %d)\n",
 			   __func__, rc);
+		sbi_hart_hang();
+	}
+
+	/*
+	 * Note: Ecall initialization should be after platform final
+	 * initialization so that all available platform devices are
+	 * already registered.
+	 */
+	rc = sbi_ecall_init();
+	if (rc) {
+		sbi_printf("%s: ecall init failed (error %d)\n", __func__, rc);
 		sbi_hart_hang();
 	}
 
@@ -345,24 +385,37 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 
 	sbi_boot_print_hart(scratch, hartid);
 
+	/*
+	 * Configure PMP at last because if SMEPMP is detected,
+	 * M-mode access to the S/U space will be rescinded.
+	 */
+	rc = sbi_hart_pmp_configure(scratch);
+	if (rc) {
+		sbi_printf("%s: PMP configure failed (error %d)\n",
+			   __func__, rc);
+		sbi_hart_hang();
+	}
+
 	wake_coldboot_harts(scratch, hartid);
 
-	init_count = sbi_scratch_offset_ptr(scratch, init_count_offset);
-	(*init_count)++;
+	count = sbi_scratch_offset_ptr(scratch, init_count_offset);
+	(*count)++;
 
-	sbi_hsm_prepare_next_jump(scratch, hartid);
-	sbi_hart_switch_mode(hartid, scratch->next_arg1, scratch->next_addr,
-			     scratch->next_mode, false);
+	sbi_hsm_hart_start_finish(scratch, hartid);
 }
 
-static void init_warm_startup(struct sbi_scratch *scratch, u32 hartid)
+static void __noreturn init_warm_startup(struct sbi_scratch *scratch,
+					 u32 hartid)
 {
 	int rc;
-	unsigned long *init_count;
+	unsigned long *count;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
-	if (!init_count_offset)
+	if (!entry_count_offset || !init_count_offset)
 		sbi_hart_hang();
+
+	count = sbi_scratch_offset_ptr(scratch, entry_count_offset);
+	(*count)++;
 
 	rc = sbi_hsm_init(scratch, hartid, false);
 	if (rc)
@@ -396,21 +449,26 @@ static void init_warm_startup(struct sbi_scratch *scratch, u32 hartid)
 	if (rc)
 		sbi_hart_hang();
 
-	rc = sbi_hart_pmp_configure(scratch);
-	if (rc)
-		sbi_hart_hang();
-
 	rc = sbi_platform_final_init(plat, false);
 	if (rc)
 		sbi_hart_hang();
 
-	init_count = sbi_scratch_offset_ptr(scratch, init_count_offset);
-	(*init_count)++;
+	/*
+	 * Configure PMP at last because if SMEPMP is detected,
+	 * M-mode access to the S/U space will be rescinded.
+	 */
+	rc = sbi_hart_pmp_configure(scratch);
+	if (rc)
+		sbi_hart_hang();
 
-	sbi_hsm_prepare_next_jump(scratch, hartid);
+	count = sbi_scratch_offset_ptr(scratch, init_count_offset);
+	(*count)++;
+
+	sbi_hsm_hart_start_finish(scratch, hartid);
 }
 
-static void init_warm_resume(struct sbi_scratch *scratch)
+static void __noreturn init_warm_resume(struct sbi_scratch *scratch,
+					u32 hartid)
 {
 	int rc;
 
@@ -424,7 +482,7 @@ static void init_warm_resume(struct sbi_scratch *scratch)
 	if (rc)
 		sbi_hart_hang();
 
-	sbi_hsm_hart_resume_finish(scratch);
+	sbi_hsm_hart_resume_finish(scratch, hartid);
 }
 
 static void __noreturn init_warmboot(struct sbi_scratch *scratch, u32 hartid)
@@ -437,14 +495,12 @@ static void __noreturn init_warmboot(struct sbi_scratch *scratch, u32 hartid)
 	if (hstate < 0)
 		sbi_hart_hang();
 
-	if (hstate == SBI_HSM_STATE_SUSPENDED)
-		init_warm_resume(scratch);
-	else
+	if (hstate == SBI_HSM_STATE_SUSPENDED) {
+		init_warm_resume(scratch, hartid);
+	} else {
+		sbi_ipi_raw_clear(hartid);
 		init_warm_startup(scratch, hartid);
-
-	sbi_hart_switch_mode(hartid, scratch->next_arg1,
-			     scratch->next_addr,
-			     scratch->next_mode, false);
+	}
 }
 
 static atomic_t coldboot_lottery = ATOMIC_INITIALIZER(0);
@@ -498,8 +554,11 @@ void __noreturn sbi_init(struct sbi_scratch *scratch)
 	 * HARTs which satisfy above condition.
 	 */
 
-	if (next_mode_supported && atomic_xchg(&coldboot_lottery, 1) == 0)
-		coldboot = true;
+	if (sbi_platform_cold_boot_allowed(plat, hartid)) {
+		if (next_mode_supported &&
+		    atomic_xchg(&coldboot_lottery, 1) == 0)
+			coldboot = true;
+	}
 
 	/*
 	 * Do platform specific nascent (very early) initialization so
@@ -513,6 +572,23 @@ void __noreturn sbi_init(struct sbi_scratch *scratch)
 		init_coldboot(scratch, hartid);
 	else
 		init_warmboot(scratch, hartid);
+}
+
+unsigned long sbi_entry_count(u32 hartid)
+{
+	struct sbi_scratch *scratch;
+	unsigned long *entry_count;
+
+	if (!entry_count_offset)
+		return 0;
+
+	scratch = sbi_hartid_to_scratch(hartid);
+	if (!scratch)
+		return 0;
+
+	entry_count = sbi_scratch_offset_ptr(scratch, entry_count_offset);
+
+	return *entry_count;
 }
 
 unsigned long sbi_init_count(u32 hartid)
