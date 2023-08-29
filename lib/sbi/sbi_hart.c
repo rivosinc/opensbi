@@ -99,6 +99,12 @@ static void mstatus_init(struct sbi_scratch *scratch)
 		else
 			mstateen_val &= ~(SMSTATEEN0_AIA | SMSTATEEN0_SVSLCT |
 					SMSTATEEN0_IMSIC);
+
+		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_CTR))
+			mstateen_val |= SMSTATEEN0_CTR;
+		else
+			mstateen_val &= ~SMSTATEEN0_CTR;
+
 		csr_write(CSR_MSTATEEN0, mstateen_val);
 #if __riscv_xlen == 32
 		csr_write(CSR_MSTATEEN0H, mstateen_val >> 32);
