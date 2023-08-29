@@ -63,6 +63,8 @@ enum sbi_hart_extensions {
 	SBI_HART_EXT_SSCSRIND,
 	/** Hart has Ssccfg extension */
 	SBI_HART_EXT_SSCCFG,
+	/** HART has CTR M-mode CSRs */
+	SBI_HART_EXT_SMCTR,
 
 	/** Maximum index of Hart extension */
 	SBI_HART_EXT_MAX,
