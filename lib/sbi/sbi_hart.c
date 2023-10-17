@@ -975,15 +975,6 @@ __pmp_skip:
 					SBI_HART_EXT_SMSTATEEN, true);
 	}
 
-	/* Detect if hart supports smcntrpmf */
-	if (hfeatures->priv_version >= SBI_HART_PRIV_VER_1_12) {
-		csr_read_allowed(CSR_MCYCLECFG, (unsigned long)&trap);
-		if (!trap.cause)
-			__sbi_hart_update_extension(hfeatures,
-					SBI_HART_EXT_SMCNTRPMF, true);
-	}
-
-
 	/* Let platform populate extensions */
 	rc = sbi_platform_extensions_init(sbi_platform_thishart_ptr(),
 					  hfeatures);

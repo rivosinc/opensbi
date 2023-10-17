@@ -380,6 +380,7 @@ static int fdt_parse_isa_one_hart(const char *isa, unsigned long *extensions)
 		SET_ISA_EXT_MAP("smepmp", SBI_HART_EXT_SMEPMP);
 		SET_ISA_EXT_MAP("smcsrind", SBI_HART_EXT_SMCSRIND);
 		SET_ISA_EXT_MAP("smcdeleg", SBI_HART_EXT_SMCDELEG);
+		SET_ISA_EXT_MAP("smcsrind", SBI_HART_EXT_SMCNTRPMF);
 #undef SET_ISA_EXT_MAP
 	}
 
