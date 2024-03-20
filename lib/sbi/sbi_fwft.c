@@ -145,6 +145,49 @@ static int fwft_get_adue(struct fwft_config *conf, unsigned long *value)
 	return SBI_OK;
 }
 
+static int fwft_double_trap_supported(struct fwft_config *conf)
+{
+	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(),
+				    SBI_HART_EXT_SSDBLTRP))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+static int fwft_set_double_trap(struct fwft_config *conf, unsigned long value)
+{
+	if (value == 1)
+#if __riscv_xlen == 32
+		csr_set(CSR_MENVCFGH, ENVCFG_DTE >> 32);
+#else
+		csr_set(CSR_MENVCFG, ENVCFG_DTE);
+#endif
+	else if (value == 0)
+#if __riscv_xlen == 32
+		csr_clear(CSR_MENVCFGH, ENVCFG_DTE >> 32);
+#else
+		csr_clear(CSR_MENVCFG, ENVCFG_DTE);
+#endif
+	else
+		return SBI_EINVAL;
+
+	return SBI_SUCCESS;
+}
+
+static int fwft_get_double_trap(struct fwft_config *conf, unsigned long *value)
+{
+	unsigned long cfg;
+
+#if __riscv_xlen == 32
+	cfg = csr_read(CSR_MENVCFGH) & (ENVCFG_DTE >> 32);
+#else
+	cfg = csr_read(CSR_MENVCFG) & ENVCFG_DTE;
+#endif
+	*value = cfg != 0;
+
+	return SBI_OK;
+}
+
 static struct fwft_config* get_feature_config(enum sbi_fwft_feature_t feature)
 {
 	int i;
@@ -235,6 +278,12 @@ static const struct fwft_feature features[] =
 		.supported = fwft_adue_supported,
 		.set = fwft_set_adue,
 		.get = fwft_get_adue,
+	},
+	{
+		.id = SBI_FWFT_DOUBLE_TRAP,
+		.supported = fwft_double_trap_supported,
+		.set = fwft_set_double_trap,
+		.get = fwft_get_double_trap,
 	},
 };
 
