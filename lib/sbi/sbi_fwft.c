@@ -155,6 +155,25 @@ static int fwft_get_adue(struct fwft_config *conf, unsigned long *value)
 	return fwft_menvcfg_read_bit(value, ENVCFG_ADUE_SHIFT);
 }
 
+static int fwft_double_trap_supported(struct fwft_config *conf)
+{
+	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(),
+				    SBI_HART_EXT_SSDBLTRP))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+static int fwft_set_double_trap(struct fwft_config *conf, unsigned long value)
+{
+	return fwft_menvcfg_set_bit(value, ENVCFG_DTE_SHIFT);
+}
+
+static int fwft_get_double_trap(struct fwft_config *conf, unsigned long *value)
+{
+	return fwft_menvcfg_read_bit(value, ENVCFG_DTE_SHIFT);
+}
+
 static struct fwft_config* get_feature_config(enum sbi_fwft_feature_t feature)
 {
 	int i;
@@ -245,6 +264,12 @@ static const struct fwft_feature features[] =
 		.supported = fwft_adue_supported,
 		.set = fwft_set_adue,
 		.get = fwft_get_adue,
+	},
+	{
+		.id = SBI_FWFT_DOUBLE_TRAP,
+		.supported = fwft_double_trap_supported,
+		.set = fwft_set_double_trap,
+		.get = fwft_get_double_trap,
 	},
 };
 
