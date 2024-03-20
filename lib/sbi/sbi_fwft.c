@@ -34,7 +34,7 @@ static unsigned long fwft_ptr_offset;
 
 #define MIS_DELEG (1UL << CAUSE_MISALIGNED_LOAD | 1UL << CAUSE_MISALIGNED_STORE)
 
-#define SUPPORTED_FEATURE_COUNT	3
+#define SUPPORTED_FEATURE_COUNT	4
 
 struct fwft_config;
 
@@ -149,6 +149,51 @@ static int sbi_get_adue(struct fwft_config *conf, unsigned long *value)
 	return SBI_OK;
 }
 
+#if __riscv_xlen == 32
+# define CSR_MENVCFG_DBLTRP	CSR_MENVCFGH
+# define DBLTRP_DTE	(ENVCFG_DTE >> 32)
+#else
+# define CSR_MENVCFG_DBLTRP	CSR_MENVCFG
+# define DBLTRP_DTE	ENVCFG_DTE
+#endif
+
+static int sbi_double_trap_supported(struct fwft_config *conf)
+{
+	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(),
+				    SBI_HART_EXT_SSDBLTRP))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+static int sbi_set_double_trap_enable(struct fwft_config *conf,
+				      unsigned long value)
+{
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+
+	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SSDBLTRP))
+		return SBI_ENOTSUPP;
+
+	if (value)
+		csr_set(CSR_MENVCFG_DBLTRP, DBLTRP_DTE);
+	else
+		csr_clear(CSR_MENVCFG_DBLTRP, DBLTRP_DTE);
+
+	return SBI_SUCCESS;
+}
+
+static int sbi_get_double_trap_enable(struct fwft_config *conf,
+				      unsigned long *value)
+{
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+
+	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SSDBLTRP))
+		return SBI_ENOTSUPP;
+
+	*value = (csr_read(CSR_MENVCFG_DBLTRP) & DBLTRP_DTE) != 0;
+
+	return SBI_SUCCESS;
+}
 
 static struct fwft_config* get_feature_config(enum sbi_fwft_feature_t feature)
 {
@@ -222,6 +267,12 @@ static const struct fwft_feature features[] =
 		.supported = sbi_misaligned_delegation_supported,
 		.set = sbi_set_misaligned_delegation,
 		.get = sbi_get_misaligned_delegation,
+	},
+	{
+		.id = SBI_FWFT_DOUBLE_TRAP,
+		.supported = sbi_double_trap_supported,
+		.set = sbi_set_double_trap_enable,
+		.get = sbi_get_double_trap_enable,
 	},
 	{
 		.id = SBI_FWFT_USEED,
