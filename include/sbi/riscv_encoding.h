@@ -214,7 +214,8 @@
 #define ENVCFG_ADUE_SHIFT		61
 #define ENVCFG_ADUE			(_ULL(1) << ENVCFG_ADUE_SHIFT)
 #define ENVCFG_CDE			(_ULL(1) << 60)
-#define ENVCFG_DTE			(_ULL(1) << 59)
+#define ENVCFG_DTE_SHIFT		59
+#define ENVCFG_DTE			(_ULL(1) << ENVCFG_DTE_SHIFT)
 #define ENVCFG_CBZE			(_UL(1) << 7)
 #define ENVCFG_CBCFE			(_UL(1) << 6)
 #define ENVCFG_CBIE_SHIFT		4
