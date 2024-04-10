@@ -33,7 +33,7 @@ static unsigned long fwft_ptr_offset;
 
 #define MIS_DELEG (1UL << CAUSE_MISALIGNED_LOAD | 1UL << CAUSE_MISALIGNED_STORE)
 
-#define SUPPORTED_FEATURE_COUNT	1
+#define SUPPORTED_FEATURE_COUNT	2
 
 struct fwft_config;
 
@@ -76,6 +76,41 @@ static int sbi_get_misaligned_delegation(struct fwft_config *conf,
 					 unsigned long *value)
 {
 	*value = (csr_read(CSR_MEDELEG) & MIS_DELEG) != 0;
+
+	return SBI_OK;
+}
+
+static int sbi_useed_supported(struct fwft_config *conf)
+{
+	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(),
+				    SBI_HART_EXT_ZKR))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+static int sbi_set_useed(struct fwft_config *conf, unsigned long value)
+{
+	unsigned long mseccfg;
+
+	if (value) {
+		/* useed might be hardwired, test it */
+
+		csr_set(CSR_MSECCFG, MSECCFG_USEED);
+		mseccfg = csr_read(CSR_MSECCFG);
+		if ((mseccfg & MSECCFG_USEED) == 0)
+			return SBI_ENOTSUPP;
+
+	} else {
+		csr_clear(CSR_MSECCFG, MSECCFG_USEED);
+	}
+
+	return SBI_OK;
+}
+
+static int sbi_get_useed(struct fwft_config *conf, unsigned long *value)
+{
+	*value = (csr_read(CSR_MSECCFG) & MSECCFG_USEED) != 0;
 
 	return SBI_OK;
 }
@@ -145,6 +180,12 @@ static const struct fwft_feature features[] =
 		.supported = sbi_misaligned_delegation_supported,
 		.set = sbi_set_misaligned_delegation,
 		.get = sbi_get_misaligned_delegation,
+	},
+	{
+		.id = SBI_FWFT_USEED,
+		.supported = sbi_useed_supported,
+		.set = sbi_set_useed,
+		.get = sbi_get_useed,
 	},
 };
 
