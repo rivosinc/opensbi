@@ -34,7 +34,7 @@ static unsigned long fwft_ptr_offset;
 
 #define MIS_DELEG (1UL << CAUSE_MISALIGNED_LOAD | 1UL << CAUSE_MISALIGNED_STORE)
 
-#define SUPPORTED_FEATURE_COUNT	2
+#define SUPPORTED_FEATURE_COUNT	3
 
 struct fwft_config;
 
@@ -115,6 +115,41 @@ static int sbi_get_useed(struct fwft_config *conf, unsigned long *value)
 	return SBI_OK;
 }
 
+static int sbi_adue_supported(struct fwft_config *conf)
+{
+	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(),
+				    SBI_HART_EXT_SVADU))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+#if __riscv_xlen == 32
+# define CSR_MENVCFG_ADUE	CSR_MENVCFGH
+# define SVADU_ADUE		(ENVCFG_ADUE >> 32)
+#else
+# define CSR_MENVCFG_ADUE	CSR_MENVCFG
+# define SVADU_ADUE		ENVCFG_ADUE
+#endif
+
+static int sbi_set_adue(struct fwft_config *conf, unsigned long value)
+{
+	if (value)
+			csr_set(CSR_MENVCFG_ADUE, SVADU_ADUE);
+	else
+			csr_clear(CSR_MENVCFG_ADUE, SVADU_ADUE);
+
+	return SBI_OK;
+}
+
+static int sbi_get_adue(struct fwft_config *conf, unsigned long *value)
+{
+	*value = (csr_read(CSR_MENVCFG_ADUE) & SVADU_ADUE) != 0;
+
+	return SBI_OK;
+}
+
+
 static struct fwft_config* get_feature_config(enum sbi_fwft_feature_t feature)
 {
 	int i;
@@ -193,6 +228,12 @@ static const struct fwft_feature features[] =
 		.supported = sbi_useed_supported,
 		.set = sbi_set_useed,
 		.get = sbi_get_useed,
+	},
+	{
+		.id = SBI_FWFT_PTE_AD_HARDWARE_UPDATE,
+		.supported = sbi_adue_supported,
+		.set = sbi_set_adue,
+		.get = sbi_get_adue,
 	},
 };
 
