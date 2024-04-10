@@ -45,6 +45,8 @@ struct sbi_hsm_data {
 	unsigned long saved_mie;
 	unsigned long saved_mip;
 	unsigned long saved_hedeleg;
+	unsigned long saved_menvcfg;
+	unsigned long saved_menvcfgh;
 	atomic_t start_ticket;
 };
 
@@ -419,6 +421,8 @@ void __sbi_hsm_suspend_non_ret_save(struct sbi_scratch *scratch)
 	hdata->saved_mie = csr_read(CSR_MIE);
 	hdata->saved_mip = csr_read(CSR_MIP) & (MIP_SSIP | MIP_STIP);
 	hdata->saved_hedeleg = csr_read(CSR_HEDELEG);
+	hdata->saved_menvcfgh = csr_read(CSR_MENVCFGH);
+	hdata->saved_menvcfg = csr_read(CSR_MENVCFG);
 }
 
 static void __sbi_hsm_suspend_non_ret_restore(struct sbi_scratch *scratch)
@@ -426,6 +430,8 @@ static void __sbi_hsm_suspend_non_ret_restore(struct sbi_scratch *scratch)
 	struct sbi_hsm_data *hdata = sbi_scratch_offset_ptr(scratch,
 							    hart_data_offset);
 
+	csr_write(CSR_MENVCFG, hdata->saved_menvcfg);
+	csr_write(CSR_MENVCFGH, hdata->saved_menvcfgh);
 	csr_write(CSR_HEDELEG, hdata->saved_hedeleg);
 	csr_write(CSR_MIE, hdata->saved_mie);
 	csr_set(CSR_MIP, (hdata->saved_mip & (MIP_SSIP | MIP_STIP)));

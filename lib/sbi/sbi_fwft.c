@@ -34,7 +34,7 @@ static unsigned long fwft_ptr_offset;
 
 #define MIS_DELEG (1UL << CAUSE_MISALIGNED_LOAD | 1UL << CAUSE_MISALIGNED_STORE)
 
-#define SUPPORTED_FEATURE_COUNT	1
+#define SUPPORTED_FEATURE_COUNT	2
 
 struct fwft_config;
 
@@ -98,6 +98,45 @@ static int fwft_get_misaligned_delegation(struct fwft_config *conf,
 					 unsigned long *value)
 {
 	*value = (csr_read(CSR_MEDELEG) & MIS_DELEG) != 0;
+
+	return SBI_OK;
+}
+
+static int fwft_adue_supported(struct fwft_config *conf)
+{
+	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(),
+				    SBI_HART_EXT_SVADU))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+#if __riscv_xlen == 32
+#define MENVCFG_REG(__val) \
+	(__builtin_ffsll(__val) > 32 ? CSR_MENVCFGH : CSR_MENVCFG)
+#define MENVCFG_VAL(__val) \
+	(__builtin_ffsll(__val) > 32 ? (__val) >> 32 : (__val))
+#else
+#define MENVCFG_REG(__val) CSR_MENVCFG
+#define MENVCFG_VAL(__val) (__val)
+#endif
+
+static int fwft_set_adue(struct fwft_config *conf, unsigned long value)
+{
+	if (value)
+		csr_set(MENVCFG_REG(ENVCFG_ADUE), MENVCFG_VAL(ENVCFG_ADUE));
+	else
+		csr_clear(MENVCFG_REG(ENVCFG_ADUE), MENVCFG_VAL(ENVCFG_ADUE));
+
+	return SBI_OK;
+}
+
+static int fwft_get_adue(struct fwft_config *conf, unsigned long *value)
+{
+	unsigned long cfg;
+
+	cfg = csr_read(MENVCFG_REG(ENVCFG_ADUE)) & MENVCFG_VAL(ENVCFG_ADUE);
+	*value = cfg != 0;
 
 	return SBI_OK;
 }
@@ -186,6 +225,12 @@ static const struct fwft_feature features[] =
 		.supported = fwft_misaligned_delegation_supported,
 		.set = fwft_set_misaligned_delegation,
 		.get = fwft_get_misaligned_delegation,
+	},
+	{
+		.id = SBI_FWFT_PTE_AD_HW_UPDATING,
+		.supported = fwft_adue_supported,
+		.set = fwft_set_adue,
+		.get = fwft_get_adue,
 	},
 };
 
