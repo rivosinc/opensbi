@@ -63,6 +63,8 @@ enum sbi_hart_extensions {
 	SBI_HART_EXT_SSCSRIND,
 	/** Hart has Ssccfg extension */
 	SBI_HART_EXT_SSCCFG,
+	/** Hart has Svadu extension */
+	SBI_HART_EXT_SVADU,
 
 	/** Maximum index of Hart extension */
 	SBI_HART_EXT_MAX,
