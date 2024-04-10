@@ -33,7 +33,7 @@ static unsigned long fwft_ptr_offset;
 
 #define MIS_DELEG (1UL << CAUSE_MISALIGNED_LOAD | 1UL << CAUSE_MISALIGNED_STORE)
 
-#define SUPPORTED_FEATURE_COUNT	0
+#define SUPPORTED_FEATURE_COUNT	1
 
 struct fwft_config;
 
@@ -52,6 +52,33 @@ struct fwft_config {
 struct fwft_hart_state {
 	struct fwft_config configs[SUPPORTED_FEATURE_COUNT];
 };
+
+static int sbi_misaligned_delegation_supported(struct fwft_config *conf)
+{
+	if (!misa_extension('S'))
+		return SBI_ENOTSUPP;
+
+	return SBI_OK;
+}
+
+static int sbi_set_misaligned_delegation(struct fwft_config *conf,
+					 unsigned long value)
+{
+	if (value)
+		csr_set(CSR_MEDELEG, MIS_DELEG);
+	else
+		csr_clear(CSR_MEDELEG, MIS_DELEG);
+
+	return SBI_OK;
+}
+
+static int sbi_get_misaligned_delegation(struct fwft_config *conf,
+					 unsigned long *value)
+{
+	*value = (csr_read(CSR_MEDELEG) & MIS_DELEG) != 0;
+
+	return SBI_OK;
+}
 
 static struct fwft_config* get_feature_config(enum sbi_fwft_feature_t feature)
 {
@@ -111,7 +138,15 @@ int sbi_fwft_get(enum sbi_fwft_feature_t feature, unsigned long *out_val)
 	return conf->feature->get(conf, out_val);
 }
 
-static const struct fwft_feature features[] = {};
+static const struct fwft_feature features[] =
+{
+	{
+		.id = SBI_FWFT_MISALIGNED_DELEG,
+		.supported = sbi_misaligned_delegation_supported,
+		.set = sbi_set_misaligned_delegation,
+		.get = sbi_get_misaligned_delegation,
+	},
+};
 
 _Static_assert(
 	array_size(features) == SUPPORTED_FEATURE_COUNT,
