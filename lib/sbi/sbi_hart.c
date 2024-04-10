@@ -148,6 +148,14 @@ static void mstatus_init(struct sbi_scratch *scratch)
 			csr_set(CSR_MSECCFG, MSECCFG_SSEED);
 			csr_clear(CSR_MSECCFG, MSECCFG_USEED);
 		}
+
+		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SVADU)) {
+#if __riscv_xlen == 32
+			csr_clear(CSR_MENVCFGH, ENVCFG_ADUE >> 32);
+#else
+			csr_clear(CSR_MENVCFG, ENVCFG_ADUE);
+#endif
+		}
 	}
 
 	/* Disable all interrupts */
@@ -668,6 +676,7 @@ const struct sbi_hart_ext_data sbi_hart_ext[] = {
 	__SBI_HART_EXT_DATA(smcdeleg, SBI_HART_EXT_SMCDELEG),
 	__SBI_HART_EXT_DATA(sscsrind, SBI_HART_EXT_SSCSRIND),
 	__SBI_HART_EXT_DATA(ssccfg, SBI_HART_EXT_SSCCFG),
+	__SBI_HART_EXT_DATA(svadu, SBI_HART_EXT_SVADU),
 };
 
 _Static_assert(SBI_HART_EXT_MAX == array_size(sbi_hart_ext),
