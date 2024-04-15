@@ -335,30 +335,44 @@ static int sse_event_set_hart_id_check(struct sbi_sse_event *e,
 static int sse_event_set_attr_check(struct sbi_sse_event *e, uint32_t attr_id,
 				    unsigned long val)
 {
-	int ret = SBI_OK;
-
 	switch (attr_id) {
 	case SBI_SSE_ATTR_CONFIG:
-		if (val & ~SBI_SSE_ATTR_CONFIG_ONESHOT)
-			ret = SBI_EINVAL;
-		break;
-	case SBI_SSE_ATTR_PRIO:
-#if __riscv_xlen > 32
-		if (val != (uint32_t)val) {
-			ret = SBI_EINVAL;
-			break;
-		}
-#endif
-		break;
-	case SBI_SSE_ATTR_PREFERRED_HART:
-		ret = sse_event_set_hart_id_check(e, val);
-		break;
-	default:
-		ret = SBI_EBAD_RANGE;
-		break;
-	}
+		if (sse_event_state(e) >= SBI_SSE_STATE_ENABLED)
+			return SBI_EINVALID_STATE;
 
-	return ret;
+		if (val & ~SBI_SSE_ATTR_CONFIG_ONESHOT)
+			return SBI_EINVAL;
+
+		return SBI_OK;
+	case SBI_SSE_ATTR_PRIO:
+		if (sse_event_state(e) >= SBI_SSE_STATE_ENABLED)
+			return SBI_EINVALID_STATE;
+
+#if __riscv_xlen > 32
+		if (val != (uint32_t)val)
+			return SBI_EINVAL;
+#endif
+		return SBI_OK;
+	case SBI_SSE_ATTR_PREFERRED_HART:
+		if (sse_event_state(e) >= SBI_SSE_STATE_ENABLED)
+			return SBI_EINVALID_STATE;
+
+		return sse_event_set_hart_id_check(e, val);
+	case SBI_SSE_ATTR_INTERRUPTED_FLAGS:
+
+		if (val & ~(SBI_SSE_ATTR_STATUS_STATE_MASK |
+				BIT(SBI_SSE_ATTR_STATUS_PENDING_OFFSET) |
+				BIT(SBI_SSE_ATTR_STATUS_INJECT_OFFSET)))
+			return SBI_EINVAL;
+
+		return SBI_OK;
+	case SBI_SSE_ATTR_INTERRUPTED_SEPC:
+	case SBI_SSE_ATTR_INTERRUPTED_A6:
+	case SBI_SSE_ATTR_INTERRUPTED_A7:
+		return SBI_OK;
+	default:
+		return SBI_EBAD_RANGE;
+	}
 }
 
 static void sse_event_set_attr(struct sbi_sse_event *e, uint32_t attr_id,
@@ -374,6 +388,19 @@ static void sse_event_set_attr(struct sbi_sse_event *e, uint32_t attr_id,
 	case SBI_SSE_ATTR_PREFERRED_HART:
 		e->attrs.hartid = val;
 		sse_event_invoke_cb(e, set_hartid_cb, val);
+		break;
+
+	case SBI_SSE_ATTR_INTERRUPTED_SEPC:
+		e->attrs.interrupted.sepc = val;
+		break;
+	case SBI_SSE_ATTR_INTERRUPTED_FLAGS:
+		e->attrs.interrupted.flags = val;
+		break;
+	case SBI_SSE_ATTR_INTERRUPTED_A6:
+		e->attrs.interrupted.a6 = val;
+		break;
+	case SBI_SSE_ATTR_INTERRUPTED_A7:
+		e->attrs.interrupted.a7 = val;
 		break;
 	}
 }
@@ -902,9 +929,6 @@ static int sse_write_attrs(struct sbi_sse_event *e, uint32_t base_attr_id,
 	unsigned long attr = 0, val;
 	uint32_t id, end_id = base_attr_id + attr_count;
 	unsigned long *attrs = (unsigned long *)input_phys;
-
-	if (sse_event_state(e) >= SBI_SSE_STATE_ENABLED)
-		return SBI_EINVALID_STATE;
 
 	sbi_hart_map_saddr(input_phys, sizeof(unsigned long) * attr_count);
 
