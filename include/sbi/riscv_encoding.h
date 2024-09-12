@@ -211,7 +211,8 @@
 
 #define ENVCFG_STCE			(_ULL(1) << 63)
 #define ENVCFG_PBMTE			(_ULL(1) << 62)
-#define ENVCFG_ADUE			(_ULL(1) << 61)
+#define ENVCFG_ADUE_SHIFT		61
+#define ENVCFG_ADUE			(_ULL(1) << ENVCFG_ADUE_SHIFT)
 #define ENVCFG_CDE			(_ULL(1) << 60)
 #define ENVCFG_DTE			(_ULL(1) << 59)
 #define ENVCFG_CBZE			(_UL(1) << 7)

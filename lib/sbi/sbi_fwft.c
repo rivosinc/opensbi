@@ -111,38 +111,48 @@ static int fwft_adue_supported(struct fwft_config *conf)
 	return SBI_OK;
 }
 
-static int fwft_set_adue(struct fwft_config *conf, unsigned long value)
+static int fwft_menvcfg_set_bit(unsigned long value, unsigned long bit)
 {
-	if (value == 1)
-#if __riscv_xlen == 32
-		csr_set(CSR_MENVCFGH, ENVCFG_ADUE >> 32);
-#else
-		csr_set(CSR_MENVCFG, ENVCFG_ADUE);
-#endif
-	else if (value == 0)
-#if __riscv_xlen == 32
-		csr_clear(CSR_MENVCFGH, ENVCFG_ADUE >> 32);
-#else
-		csr_clear(CSR_MENVCFG, ENVCFG_ADUE);
-#endif
-	else
+	if (value == 1) {
+		if (bit >= 32 && __riscv_xlen == 32)
+			csr_set(CSR_MENVCFGH, _ULL(1) << (bit - 32));
+		else
+			csr_set(CSR_MENVCFG, _ULL(1) << bit);
+
+	} else if (value == 0) {
+		if (bit >= 32 && __riscv_xlen == 32)
+			csr_clear(CSR_MENVCFGH, _ULL(1) << (bit - 32));
+		else
+			csr_clear(CSR_MENVCFG, _ULL(1) << bit);
+	} else {
 		return SBI_EINVAL;
+	}
 
 	return SBI_OK;
 }
 
-static int fwft_get_adue(struct fwft_config *conf, unsigned long *value)
+static int fwft_menvcfg_read_bit(unsigned long *value, unsigned long bit)
 {
 	unsigned long cfg;
 
-#if __riscv_xlen == 32
-	cfg = csr_read(CSR_MENVCFGH) & (ENVCFG_ADUE >> 32);
-#else
-	cfg = csr_read(CSR_MENVCFG) & ENVCFG_ADUE;
-#endif
+	if (bit >= 32 && __riscv_xlen == 32)
+		cfg = csr_read(CSR_MENVCFGH) & (_ULL(1) << (bit - 32));
+	else
+		cfg = csr_read(CSR_MENVCFG) & (_ULL(1) << bit);
+
 	*value = cfg != 0;
 
 	return SBI_OK;
+}
+
+static int fwft_set_adue(struct fwft_config *conf, unsigned long value)
+{
+	return fwft_menvcfg_set_bit(value, ENVCFG_ADUE_SHIFT);
+}
+
+static int fwft_get_adue(struct fwft_config *conf, unsigned long *value)
+{
+	return fwft_menvcfg_read_bit(value, ENVCFG_ADUE_SHIFT);
 }
 
 static struct fwft_config* get_feature_config(enum sbi_fwft_feature_t feature)
