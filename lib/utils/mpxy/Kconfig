@@ -14,6 +14,9 @@ config FDT_MPXY_RPMI_MBOX
 	depends on FDT_MAILBOX
 	default n
 
+config FDT_MPXY_MM
+	bool "FDT MPXY MM client driver"
+	default n
 endif
 
 endmenu
