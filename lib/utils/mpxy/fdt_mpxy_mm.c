@@ -74,9 +74,9 @@ static struct sbi_domain *tdomain = NULL;
 
 static struct sbi_domain *__get_domain(char* name)
 {
-	int i;
+	// int i;
 	struct sbi_domain *dom = NULL;
-	sbi_domain_for_each(i, dom)
+	sbi_domain_for_each(dom)
 	{
 		if (!sbi_strcmp(dom->name, name)) {
 			return dom;
@@ -232,8 +232,12 @@ static int mpxy_mm_send_message(struct sbi_mpxy_channel *channel,
 		sbi_memcpy(respbuf, current_msg.msgbuf, current_msg.msg_len);
 		*ack_len = current_msg.msg_len;
 	} else if (RPMI_REQFWD_COMPLETE_CURRENT_MESSAGE == msg_id) {
-		sbi_memcpy(current_msg.respbuf, msgbuf, msg_len);
-		current_msg.resp_len = msg_len;
+		if(current_msg.respbuf == NULL) {
+			//sbi_domain_context_exit();
+		} else {
+			sbi_memcpy(current_msg.respbuf, msgbuf, msg_len);
+			current_msg.resp_len = msg_len;
+		}
 	} else if (RISCV_MSG_ID_SMM_COMMUNICATE == msg_id) {
 		struct mm_msg_comm msg;
 		msg.msgbuf = msgbuf;
@@ -289,7 +293,7 @@ static int mpxy_mm_init(const void *fdt, int nodeoff,
 	}
 
 	channel->channel_id = mm_channel_id;
-	channel->send_message = mpxy_mm_send_message;
+	channel->send_message_with_response = mpxy_mm_send_message;
 	channel->attrs.msg_data_maxlen = RISCV_MSG_SMM_MAX_LEN;
 	channel->attrs.sse_event_id = MPXY_MM_SSE_EVENT_NOTIF;
 	rc = sbi_mpxy_register_channel(channel);
@@ -308,7 +312,7 @@ static const struct fdt_match mpxy_mm_match[] = {
 	{},
 };
 
-struct fdt_mpxy fdt_mpxy_mm = {
+struct fdt_driver fdt_mpxy_mm = {
 	.match_table = mpxy_mm_match,
 	.init = mpxy_mm_init,
 };
