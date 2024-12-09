@@ -84,12 +84,14 @@ static void rpmi_cppc_fc_db_trigger(struct rpmi_cppc *cppc)
 		break;
 	case RPMI_CPPC_FAST_CHANNEL_DB_WIDTH_64:
 #if __riscv_xlen != 32
+{
 		u64 db_val_u64 = 0;
 		db_val_u64 = readq((void *)cppc->fc_db_addr);
 		db_val_u64 = cppc->fc_db_setmask |
 				(db_val_u64 & cppc->fc_db_preservemask);
 
 		writeq(db_val_u64, (void *)cppc->fc_db_addr);
+}
 #else
 		u32 db_val_u32_hi = 0;
 		db_val_u32 = readl((void *)cppc->fc_db_addr);
