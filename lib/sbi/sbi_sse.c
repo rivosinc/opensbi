@@ -45,6 +45,7 @@ static const uint32_t supported_events[] = {
 	SBI_SSE_EVENT_GLOBAL_RAS,
 	SBI_SSE_EVENT_LOCAL_PMU,
 	SBI_SSE_EVENT_LOCAL_SOFTWARE,
+	SBI_SSE_EVENT_LOCAL_MPXY_NOTIF,
 	SBI_SSE_EVENT_GLOBAL_SOFTWARE,
 };
 
@@ -468,6 +469,18 @@ static unsigned long sse_interrupted_flags(unsigned long mstatus)
 	return flags;
 }
 
+static void sse_mpxy_event_inject(struct sbi_sse_event *e,
+			     struct sbi_trap_regs *regs)
+{
+	sse_event_set_state(e, SBI_SSE_STATE_RUNNING);
+
+	e->attrs.status = ~BIT(SBI_SSE_ATTR_STATUS_PENDING_OFFSET);
+
+	regs->a6 = e->attrs.entry.arg;
+	regs->a7 = current_hartid();
+	regs->mepc = e->attrs.entry.pc;
+}
+
 static void sse_event_inject(struct sbi_sse_event *e,
 			     struct sbi_trap_regs *regs)
 {
@@ -603,7 +616,10 @@ static bool sse_event_check_inject(struct sbi_sse_event *e,
 	}
 
 	if (sse_event_is_ready(e)) {
-		sse_event_inject(e, regs);
+		if(e->event_id == SBI_SSE_EVENT_LOCAL_MPXY_NOTIF)
+			sse_mpxy_event_inject(e, regs);
+		else
+			sse_event_inject(e, regs);
 		return true;
 	}
 
@@ -736,6 +752,8 @@ static int sse_event_enable(struct sbi_sse_event *e)
 		sbi_ipi_send_many(1, e->attrs.hartid, sse_ipi_inject_event,
 				  NULL);
 
+	if(e->event_id == SBI_SSE_EVENT_LOCAL_MPXY_NOTIF)
+		sse_event_set_state(e, SBI_SSE_STATE_RUNNING);
 	return SBI_OK;
 }
 
@@ -753,11 +771,19 @@ static int sse_event_complete(struct sbi_sse_event *e,
 	if (e->attrs.config & SBI_SSE_ATTR_CONFIG_ONESHOT)
 		sse_event_disable(e);
 
-	sse_event_invoke_cb(e, complete_cb);
-
-	sse_event_resume(e, regs);
-	out->skip_regs_update = true;
-
+	if(e->event_id == SBI_SSE_EVENT_LOCAL_MPXY_NOTIF) {
+		static int is_first_time = 1;
+		if(is_first_time) {
+			struct sse_hart_state *state = sse_thishart_state_ptr();
+			spin_unlock(&state->enabled_event_lock);
+			is_first_time = 0;
+		}
+		sse_event_invoke_cb(e, complete_cb);
+	} else {
+		sse_event_invoke_cb(e, complete_cb);
+		sse_event_resume(e, regs);
+		out->skip_regs_update = true;
+	}
 	return SBI_OK;
 }
 
