@@ -204,6 +204,14 @@ struct mm_msg_comm {
 	unsigned long *ack_len;
 };
 
+struct mm_get_attributes {
+	int status;
+	u32 mm_version;
+	u32 mm_shmem_addr_low;
+	u32 mm_shmem_addr_high;
+	u32 mm_shmem_size;
+};
+
 #define MM_MSG_BUFFER_SIZE       8
 static struct mm_msg_comm mm_msg_buffer[MM_MSG_BUFFER_SIZE] = { 0 };
 static SBI_FIFO_DEFINE(mm_msg_fifo, mm_msg_buffer, \
@@ -216,15 +224,18 @@ static int mpxy_mm_send_message(struct sbi_mpxy_channel *channel,
 			    unsigned long *ack_len)
 {
 	if (RISCV_MSG_ID_SMM_VERSION == msg_id) {
-		uint32_t status = 0;
-		uint32_t offset = 0;
-		uint32_t version = SMM_VERSION_COMPILED;
-		sbi_memcpy((void *)respbuf, &status, sizeof(status));
-		offset += sizeof(status);
-		sbi_memcpy((void *)respbuf, &version, sizeof(version));
-					offset += sizeof(version);
-			if (ack_len)
-				*ack_len = offset;
+		struct mm_get_attributes attr;
+		attr.status	 = 0;
+		attr.mm_version = SMM_VERSION_COMPILED;
+		attr.mm_shmem_addr_low = 0xFFE00000;
+		attr.mm_shmem_size     = 0x200000;
+		sbi_memcpy((void *)respbuf, &attr,
+			   sizeof(struct mm_get_attributes));
+		// offset += sizeof(status);
+		// sbi_memcpy((void *)respbuf, &version, sizeof(version));
+		// 			offset += sizeof(version);
+		if (ack_len)
+			*ack_len = sizeof(struct mm_get_attributes);
 	} else if (RPMI_REQFWD_RETRIEVE_CURRENT_MESSAGE == msg_id) {
 		sbi_fifo_dequeue(&mm_msg_fifo, &current_msg);
 		sbi_memcpy(respbuf, current_msg.msgbuf, current_msg.msg_len);
