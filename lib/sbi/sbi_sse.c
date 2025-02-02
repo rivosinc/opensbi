@@ -752,8 +752,6 @@ static int sse_event_enable(struct sbi_sse_event *e)
 		sbi_ipi_send_many(1, e->attrs.hartid, sse_ipi_inject_event,
 				  NULL);
 
-	if(e->event_id == SBI_SSE_EVENT_LOCAL_MPXY_NOTIF)
-		sse_event_set_state(e, SBI_SSE_STATE_RUNNING);
 	return SBI_OK;
 }
 
@@ -772,12 +770,12 @@ static int sse_event_complete(struct sbi_sse_event *e,
 		sse_event_disable(e);
 
 	if(e->event_id == SBI_SSE_EVENT_LOCAL_MPXY_NOTIF) {
-		static int is_first_time = 1;
-		if(is_first_time) {
-			struct sse_hart_state *state = sse_thishart_state_ptr();
-			spin_unlock(&state->enabled_event_lock);
-			is_first_time = 0;
-		}
+		// static int is_first_time = 1;
+		// if(is_first_time) {
+		// 	struct sse_hart_state *state = sse_thishart_state_ptr();
+		// 	spin_unlock(&state->enabled_event_lock);
+		// 	is_first_time = 0;
+		// }
 		sse_event_invoke_cb(e, complete_cb);
 	} else {
 		sse_event_invoke_cb(e, complete_cb);
