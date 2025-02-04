@@ -103,6 +103,8 @@ struct sbi_sse_event {
 	u32 hartindex;
 	struct sse_event_info *info;
 	struct sbi_dlist node;
+	struct sbi_domain *domain;
+	bool changed_domain;
 };
 
 /** Per-hart state */
@@ -486,6 +488,7 @@ static int sse_event_register(struct sbi_sse_event *e,
 
 	e->attrs.entry.pc = handler_entry_pc;
 	e->attrs.entry.arg = handler_entry_arg;
+	e->domain = sbi_domain_thishart_ptr();
 
 	sse_event_set_state(e, SBI_SSE_STATE_REGISTERED);
 
@@ -526,12 +529,22 @@ static unsigned long sse_interrupted_flags(unsigned long mstatus)
 	return flags;
 }
 
+static bool sse_event_for_current_domain(struct sbi_sse_event *e)
+{
+	return e->domain == sbi_domain_thishart_ptr();
+}
+
 static void sse_event_inject(struct sbi_sse_event *e,
 			     struct sbi_trap_regs *regs)
 {
 	struct sse_interrupted_state *i_ctx = &e->attrs.interrupted;
 
 	sse_event_set_state(e, SBI_SSE_STATE_RUNNING);
+
+	if (!sse_event_for_current_domain(e)) {
+		sbi_domain_context_enter(e->domain);
+		e->changed_domain = true;
+	}
 
 	e->attrs.status = ~BIT(SBI_SSE_ATTR_STATUS_PENDING_OFFSET);
 
@@ -813,6 +826,11 @@ static int sse_event_complete(struct sbi_sse_event *e,
 	out->skip_regs_update = true;
 	sse_event_invoke_cb(e, complete_cb);
 
+	if (e->changed_domain) {
+		e->changed_domain = false;
+		sbi_domain_context_exit();
+	}
+
 	return SBI_OK;
 }
 
@@ -828,7 +846,8 @@ int sbi_sse_complete(struct sbi_trap_regs *regs, struct sbi_ecall_return *out)
 		 * List of event is ordered by priority, first one running is
 		 * the one that needs to be completed
 		 */
-		if (sse_event_state(tmp) == SBI_SSE_STATE_RUNNING) {
+		if (sse_event_for_current_domain(tmp) &&
+		    sse_event_state(tmp) == SBI_SSE_STATE_RUNNING) {
 			ret = sse_event_complete(tmp, regs, out);
 			break;
 		}
