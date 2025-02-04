@@ -809,10 +809,9 @@ static int sse_event_complete(struct sbi_sse_event *e,
 	if (e->attrs.config & SBI_SSE_ATTR_CONFIG_ONESHOT)
 		sse_event_disable(e);
 
-	sse_event_invoke_cb(e, complete_cb);
-
 	sse_event_resume(e, regs);
 	out->skip_regs_update = true;
+	sse_event_invoke_cb(e, complete_cb);
 
 	return SBI_OK;
 }
