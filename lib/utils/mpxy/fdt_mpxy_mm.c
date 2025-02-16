@@ -50,12 +50,10 @@ struct mm_boot_info {
 	u64 mm_stack_base;
 	u64 mm_heap_base;
 	u64 mm_ns_comm_buf_base;
-	u64 mm_shared_buf_base;
 	u64 mm_image_size;
 	u64 mm_pcpu_stack_size;
 	u64 mm_heap_size;
 	u64 mm_ns_comm_buf_size;
-	u64 mm_shared_buf_size;
 	u32 num_mem_region;
 	u32 num_cpus;
 	u32 mm_channel_id;
@@ -158,16 +156,6 @@ static int mpxy_mm_setup_bootinfo(const void *fdt, int nodeoff, const struct fdt
 	if (!prop_value || len < 4)
 		return SBI_EINVAL;
 	boot_info->mm_pcpu_stack_size = (unsigned long)fdt32_to_cpu(*prop_value);
-
-	prop_value = fdt_getprop(fdt, nodeoff, "shared-buf", &len);
-	if (!prop_value || len < 16)
-		return SBI_EINVAL;
-	base64 = fdt32_to_cpu(prop_value[0]);
-	base64 = (base64 << 32) | fdt32_to_cpu(prop_value[1]);
-	size64 = fdt32_to_cpu(prop_value[2]);
-	size64 = (size64 << 32) | fdt32_to_cpu(prop_value[3]);
-	boot_info->mm_shared_buf_base	= base64;
-	boot_info->mm_shared_buf_size	= size64;
 
 	prop_value = fdt_getprop(fdt, nodeoff, "ns-comm-buf", &len);
 	if (!prop_value || len < 16)
