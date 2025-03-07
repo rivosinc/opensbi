@@ -1268,7 +1268,7 @@ void sbi_sse_exit(struct sbi_scratch *scratch)
 			goto skip;
 
 		if (sse_event_state(e) > SBI_SSE_STATE_REGISTERED) {
-			sbi_printf("Event %d in invalid state at exit",
+			sbi_printf("Event 0x%x in invalid state at exit\n",
 				   info->event_id);
 			sse_event_set_state(e, SBI_SSE_STATE_UNUSED);
 		}
