@@ -232,6 +232,7 @@ static int mpxy_mm_send_message(struct sbi_mpxy_channel *channel,
 		if(current_msg.respbuf != NULL) {
 			sbi_memcpy(current_msg.respbuf, msgbuf, msg_len);
 			current_msg.resp_len = msg_len;
+			*ack_len = current_msg.msg_len;
 		}
 		sbi_domain_context_exit();
 
